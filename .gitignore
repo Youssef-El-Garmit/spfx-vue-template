@@ -10,3 +10,4 @@ webpart/node_modules
 webpart/release
 webpart/sharepoint
 webpart/temp
+.env
