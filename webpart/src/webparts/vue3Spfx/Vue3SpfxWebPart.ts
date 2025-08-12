@@ -21,8 +21,8 @@
  
  // Make.ps1 utility should automatically update these paths after each build of the Vue app
  // using the bundle-webpart-assets.js Node script:
- import { renderVue } from "../assets/appcode/index.923143b7.js";
- import "../assets/appcode/index.bcc7f1e2.css";
+ import { renderVue } from "../assets/appcode/index-1d509b44.js";
+ import "../assets/appcode/index-1d509b44.js";
 //  import "../assets/appcode/vendor.333eb2ee.js";
  
  // update all occurrences of the following value to represent your specific webpart:

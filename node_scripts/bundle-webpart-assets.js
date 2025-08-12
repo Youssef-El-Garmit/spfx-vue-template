@@ -6,6 +6,14 @@
 */
 const fs = require("fs");
 
+const path = require("path");
+
+function findFileCaseInsensitive(dir, filename) {
+    const files = fs.readdirSync(dir);
+    const match = files.find(f => f.toLowerCase() === filename.toLowerCase());
+    return match ? path.join(dir, match) : null;
+}
+
 const PACKAGE_SOLUTION = "webpart/config/package-solution.json",
     WEBPART_BASE = "webpart/src/webparts",
     ASSETS_BASE = "webpart/src/webparts/assets/appcode",
@@ -82,16 +90,32 @@ const logStatus = (message) => {
     updateRefsInWebpart = (basePath, webpartName, assetFiles) => {
         if (basePath && webpartName && assetFiles) {
             try {
-                let webpartFilePath = basePath + WEBPART_BASE + '/' + webpartName + '/' + webpartName + WEBPART_SUFFIX,
-                    script = fs.readFileSync(webpartFilePath, "utf-8"),
-                    indexJsAsset = assetFiles.find((file) => file.match(/index\.[\w\d]+.js/ig) != null),
-                    indexCssAsset = assetFiles.find((file) => file.match(/index\.[\w\d]+.css/ig) != null),
-                    vendorJsAsset = assetFiles.find((file) => file.match(/vendor\.[\w\d]+.js/ig) != null);
+                const webpartDir = path.join(basePath, WEBPART_BASE, webpartName);
+                const targetFileName = `${webpartName}${WEBPART_SUFFIX}`;
+                
+                // Find actual file regardless of casing
+                const webpartFilePath = findFileCaseInsensitive(webpartDir, targetFileName);
+    
+                if (!webpartFilePath) {
+                    throw new Error(`Webpart file not found: ${targetFileName} in ${webpartDir}`);
+                }
+    
+                let script = fs.readFileSync(webpartFilePath, "utf-8");
+    
+                const indexJsAsset = assetFiles.find(f => /^(?:.*\/)?index(?:[-.][\w\d]+)?\.js$/i.test(f));
+                const indexCssAsset = assetFiles.find(f => /^(?:.*\/)?index(?:[-.][\w\d]+)?\.js$/i.test(f));
+                const vendorJsAsset = assetFiles.find(f => /^(?:.*\/)?vendor(?:[-.][\w\d]+)?\.js$/i.test(f));
+    
                 if (script && indexJsAsset && indexCssAsset) {
                     script = replaceLine(script, INDEX_JS, indexJsAsset.replace("index", ""), SUFFIX);
                     script = replaceLine(script, INDEX_CSS, indexCssAsset.replace("index", ""), SUFFIX);
-                    if (vendorJsAsset) script = replaceLine(script, VENDOR_JS, vendorJsAsset.replace("vendor", ""), SUFFIX);
+                    if (vendorJsAsset) {
+                        script = replaceLine(script, VENDOR_JS, vendorJsAsset.replace("vendor", ""), SUFFIX);
+                    }
+                    console.log("herreee");
                 }
+    
+                console.log(webpartFilePath);
                 fs.writeFileSync(webpartFilePath, script);
                 logStatus("Webpart script references new assets.");
             } catch (e) {
@@ -99,27 +123,56 @@ const logStatus = (message) => {
             }
         }
     },
-    addRenderFn = (assetsBase, assetFiles, prefix, suffix) => {
-        if (assetsBase) {
-            try {
-                let indexJsAsset = assetFiles.find((file) => file.match(/index\.[\w\d]+.js/ig) != null);
-                if (indexJsAsset) {
-                    let script = fs.readFileSync(assetsBase + indexJsAsset, "utf-8"),
-                        varCodePos = script.lastIndexOf("var ");
-                    if (varCodePos > 0) {
-                        let renderFn = script.substring(varCodePos);
-                        script = script.substring(0, varCodePos) + "\n\n";
-                        renderFn = renderFn.replace(/\"\#[\w\d\-]+\"/, "appID");
-                        script = script + prefix + renderFn + suffix;
-                        fs.writeFileSync(assetsBase + indexJsAsset, script);
-                        logStatus("App script updated with render function.");
-                    }
-                } else logError("Can't find index.js asset.");
-            } catch (e) {
-                logError(e);
-            }
+    addRenderFn = (assetsBase, assetFiles, _prefix, _suffix) => {
+        if (!assetsBase) return;
+        try {
+          const indexJsAsset = assetFiles.find(f => /^(?:.*\/)?index(?:[-.][\w\d]+)?\.js$/i.test(f));
+          if (!indexJsAsset) {
+            logError("Can't find index.js asset.");
+            return;
+          }
+      
+          const filePath = assetsBase + "/" + indexJsAsset;
+          let script = fs.readFileSync(filePath, "utf-8");
+      
+          // Avoid re-adding
+          if (script.includes("renderVue") && script.includes("__vue3_spfx__")) {
+            logStatus("Render function already appended.");
+            return;
+          }
+      
+          // We don't try to move code; we only APPEND a wrapper that uses the existing 'xa' Vue app.
+          const appendix = `
+      
+      /* ===== SPFx wrapper appended by build script =====
+         Exposes a CommonJS export and a browser global without using ESM 'export'
+         Expected: the bundle defines 'xa' = createApp(...).
+      */
+      (function(factory){
+        if (typeof exports === 'object' && typeof module !== 'undefined') {
+          factory(exports);
+        } else {
+          window.__vue3_spfx__ = window.__vue3_spfx__ || {};
+          factory(window.__vue3_spfx__);
         }
-    },
+      })(function(exports){
+        // 'xa' must be in scope in the built bundle (created by Vite/Vue)
+        if (typeof xa === "undefined") {
+          console && console.warn && console.warn("[vue3-spfx] Vue app instance 'xa' not found in bundle.");
+          return;
+        }
+        exports.renderVue = function renderVue(appID){ xa.mount(appID); };
+      });
+      /* ===== end wrapper ===== */
+      `;
+      
+          fs.writeFileSync(filePath, script + appendix);
+          logStatus("App script updated with render function (CommonJS + global).");
+        } catch (e) {
+          logError(e);
+        }
+      }
+      ,
     run = () => {
         let basePath = process.cwd() + "/",
             version = getPackageVersion(basePath);
