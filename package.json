@@ -10,7 +10,6 @@
     "serve": "vite preview"
   },
   "dependencies": {
-    "@pnp/sp": "^2.12.0",
     "vue": "^3.2.37"
   },
   "devDependencies": {
