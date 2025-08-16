@@ -11,3 +11,4 @@ webpart/release
 webpart/sharepoint
 webpart/temp
 .env
+package-lock.json
