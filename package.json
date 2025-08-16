@@ -1,16 +1,14 @@
 {
   "name": "vue3-spfx",
   "version": "3.14.0",
-  "engines": {
-    "node": "18.18.0"
-  },
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "serve": "vite preview"
   },
   "dependencies": {
-    "vue": "^3.2.37"
+    "vue": "^3.2.37",
+    "@fluentui/web-components": "^2.6.0"
   },
   "devDependencies": {
     "@types/es6-promise": "0.0.33",
